@@ -1,94 +1,142 @@
 import streamlit as st
+import pandas as pd
 import yfinance as yf
 import finnhub
 import google.generativeai as genai
 from datetime import datetime, timedelta
 
-# アプリの基本設定
-st.set_page_config(page_title="AI投資アナリスト yuyu", layout="centered")
-st.title("📈 AI投資診断アプリ by yuyu")
-st.caption("世界最新のAIモデルによる銘柄分析（ROE・EPS・最新ニュース重視）")
+# --- 0. アプリ基本設定 ---
+st.set_page_config(page_title="AI投資アナリスト yuyu Premium", layout="centered")
 
-# --- 1. セキュリティ設定（Secretsから読み込み） ---
-try:
-    gemini_key = st.secrets["GEMINI_API_KEY"]
-    finnhub_key = st.secrets["FINNHUB_API_KEY"]
-    genai.configure(api_key=gemini_key)
-except Exception:
-    st.error("システム設定エラー：APIキーが見つかりません。")
-    st.stop()
-
-# --- 2. AI分析関数（キャッシュ機能：1時間保存） ---
-# ttl=3600 は 3600秒（1時間）という意味です
-@st.cache_data(ttl=3600, show_spinner=False)
-def get_ai_analysis(ticker_symbol, info_dict, news_text):
-    # yuyuさんのリストにあった最新モデルを指定
-    model = genai.GenerativeModel("gemini-2.0-flash")
-    
-    prompt = (
-        f"あなたはプロの投資家『yuyu』として、ブログやYouTubeの視聴者に語りかけるように回答してください。\n\n"
-        f"【分析データ】\n"
-        f"銘柄: {ticker_symbol}\n"
-        f"現在価格: ${info_dict.get('currentPrice', '不明')}\n"
-        f"ROE: {info_dict.get('returnOnEquity', 0)*100:.2f}%\n"
-        f"EPS成長率: {info_dict.get('earningsGrowth', 0)*100:.2f}%\n"
-        f"PER: {info_dict.get('forwardPE', '不明')}\n"
-        f"ニュース概要: {news_text}\n\n"
-        f"【依頼】\n"
-        f"1. ROEとEPSの推移から見た企業の「稼ぐ力」を、yuyu流の鋭い視点で評価してください。\n"
-        f"2. 直近のニュースを踏まえた、短期的・長期的な展望を解説してください。\n"
-        f"3. 長期投資の観点から、具体的に『何ドルまでなら割安と言えるか（買い増し推奨価格）』を根拠とともに提示してください。\n\n"
-        f"※SNSやブログ用のキャッチコピー案は不要です。分析結果のみを、親しみやすくもプロらしい日本語で詳しく回答してください。"
-    )
-    
-    response = model.generate_content(prompt)
-    return response.text
-
-# --- 3. ユーザー入力 ---
-raw_input = st.text_input("銘柄コード (例: AAPL, 7203, NVDA)", "NVDA").strip()
-
-# 日本株の自動補完 (.T付与)
-if raw_input.isdigit() and len(raw_input) == 4:
-    ticker = f"{raw_input}.T"
-else:
-    ticker = raw_input.upper()
-
-# 注意書き（エラー対策）
-st.warning("""
-**⚠️ ご利用上の注意** 現在、無料枠で運営しているため、アクセスが集中すると「429 Quota Exceeded」というエラーが出ることがあります。その場合は、**1〜5分ほど時間を置いてから**再度実行してみてください。
-""")
-
-# --- 4. 実行ボタン ---
-if st.button("AIフル分析を実行"):
+# --- 1. ユーザーデータベース（Googleスプレッドシート）の読み込み ---
+@st.cache_data(ttl=600) # 10分ごとにスプレッドシートの最新情報を反映
+def load_user_data():
     try:
-        with st.spinner(f"最新モデルで {ticker} を多角的に分析中..."):
-            # データ取得
-            stock = yf.Ticker(ticker)
-            info = stock.info
-            finnhub_client = finnhub.Client(api_key=finnhub_key)
-            
-            end_date = datetime.now().strftime('%Y-%m-%d')
-            start_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
-            news = finnhub_client.company_news(ticker, _from=start_date, to=end_date)
-            news_summary = "\n".join([f"- {n['headline']}" for n in news[:5]]) if news else "直近の重要ニュースなし"
+        # Streamlit CloudのSecretsに設定したCSV公開URLを読み込む
+        sheet_url = st.secrets["USER_SHEET_URL"]
+        df = pd.read_csv(sheet_url)
+        return df
+    except Exception:
+        # 読み込めない場合は空のデータフレームを返す
+        return pd.DataFrame(columns=["username", "password", "name"])
 
-            # キャッシュ機能付きのAI分析を呼び出し
-            analysis_result = get_ai_analysis(ticker, info, news_summary)
+user_db = load_user_data()
 
-            # 結果表示
-            st.success(f"{ticker} の分析が完了しました！")
-            st.markdown("---")
-            st.markdown(analysis_result)
-            
-    except Exception as e:
-        st.error(f"詳細エラー: {e}")
+# --- 2. セッション状態（ログイン・利用回数）の初期化 ---
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+    st.session_state.user_info = None
+if "usage_count" not in st.session_state:
+    st.session_state.usage_count = 0
 
-# --- 5. 免責事項とブログ誘導 ---
+# --- 3. サイドバー：有料プラン案内 & ログイン管理 ---
+with st.sidebar:
+    st.title("💎 Premium Plan")
+    if not st.session_state.authenticated:
+        st.write("有料会員になると：")
+        st.write("✅ 1日の利用回数が**無制限**")
+        st.write("✅ yuyu流の**買い増し推奨価格**を表示")
+        st.write("✅ 最新ニュースの**詳細分析**を解放")
+        st.link_button("👉 有料プランに申し込む", "https://bodymoneymakers.com/premium")
+        st.markdown("---")
+        st.subheader("🔑 会員ログイン")
+        with st.form("login_sidebar"):
+            user = st.text_input("ユーザーID")
+            pw = st.text_input("パスワード", type="password")
+            if st.form_submit_button("ログイン"):
+                match = user_db[(user_db['username'].astype(str) == user) & (user_db['password'].astype(str) == pw)]
+                if not match.empty:
+                    st.session_state.authenticated = True
+                    st.session_state.user_info = match.iloc[0]
+                    st.rerun()
+                else:
+                    st.error("IDまたはパスワードが違います")
+    else:
+        st.write(f"👤 **{st.session_state.user_info['name']} 様**")
+        st.success("プレミアムプラン適用中")
+        if st.button("ログアウト"):
+            st.session_state.authenticated = False
+            st.session_state.user_info = None
+            st.rerun()
+
+# --- 4. メイン画面の構成 ---
+st.title("📈 AI投資診断アプリ by yuyu")
+st.caption("最新のAIモデルによる銘柄分析（ROE・EPS・最新ニュース重視）")
+
+# 状態に応じたメッセージ表示
+is_premium = st.session_state.authenticated
+if not is_premium:
+    st.info(f"💡 無料版：本日の残り利用回数 {max(0, 3 - st.session_state.usage_count)} 回")
+    st.warning("⚠️ 無料枠はアクセス集中時にエラー（429）が出ることがあります。")
+
+# 銘柄入力
+raw_input = st.text_input("銘柄コードを入力 (例: AAPL, 7203, NVDA)", "NVDA").strip()
+ticker = f"{raw_input}.T" if (raw_input.isdigit() and len(raw_input) == 4) else raw_input.upper()
+
+# --- 5. 分析実行ロジック ---
+if st.button("AIフル分析を実行"):
+    if not is_premium and st.session_state.usage_count >= 3:
+        st.error("本日の無料枠を超えました。プレミアム会員に登録すると無制限でご利用いただけます！")
+        st.link_button("💎 プレミアム会員の登録はこちら", "https://bodymoneymakers.com/premium")
+    else:
+        try:
+            with st.spinner(f"最新のAIが {ticker} を分析中..."):
+                # データ取得
+                stock = yf.Ticker(ticker)
+                info = stock.info
+                
+                # ニュース取得
+                finnhub_client = finnhub.Client(api_key=st.secrets["FINNHUB_API_KEY"])
+                end_date = datetime.now().strftime('%Y-%m-%d')
+                start_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+                news = finnhub_client.company_news(ticker, _from=start_date, to=end_date)
+                news_summary = "\n".join([f"- {n['headline']}" for n in news[:5]]) if news else "直近ニュースなし"
+
+                # プロンプトの切り替え（有料/無料）
+                if is_premium:
+                    prompt = (
+                        f"あなたはプロの投資家『yuyu』として詳細に回答してください。\n"
+                        f"銘柄:{ticker}、ROE:{info.get('returnOnEquity',0)*100:.2f}%、EPS成長:{info.get('earningsGrowth',0)*100:.2f}%。\n"
+                        f"ニュース:{news_summary}\n\n"
+                        f"【依頼】ROE/EPSから見た『企業の稼ぐ力』を深掘りし、今後の展望と、具体的な『買い増し推奨価格（何ドルまでなら割安か）』を根拠とともに詳しく解説してください。"
+                    )
+                else:
+                    prompt = (
+                        f"銘柄:{ticker}のROEとEPSから見た『稼ぐ力』を100文字以内で簡潔に評価してください。具体的な推奨価格などの詳細は伏せてください。"
+                    )
+
+                # AI分析実行（Gemini 2.0 Flash）
+                genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                model = genai.GenerativeModel("gemini-2.0-flash")
+                response = model.generate_content(prompt)
+
+                st.markdown("---")
+                st.markdown(response.text)
+                
+                # 無料ユーザーのみカウントアップ
+                if not is_premium:
+                    st.session_state.usage_count += 1
+                    
+        except Exception as e:
+            st.error(f"詳細エラー: {e}")
+
+# --- 6. 画面下部：ブログ誘導 & 比較案内 ---
 st.markdown("---")
+if not is_premium:
+    st.subheader("🚀 さらなる詳細分析が必要ですか？")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.write("**無料版（現在）**")
+        st.write("・1日3回まで")
+        st.write("・簡易コメントのみ")
+    with col2:
+        st.write("**プレミアム版（Premium）**")
+        st.write("・✨ **利用回数 無制限**")
+        st.write("・✨ **目標株価・詳細分析を解放**")
+    st.link_button("💎 プレミアム会員の詳細・登録はこちら", "https://bodymoneymakers.com/premium")
+    st.markdown("---")
+
 st.info("※この分析はAIによる予測であり、投資の最終決定はご自身の判断で行ってください。")
-
-st.markdown("---")
 st.write("💡 **最新の銘柄分析や投資戦略はブログで詳しく解説中！**")
 st.link_button("📝 yuyuの投資ブログをチェックする", "https://bodymoneymakers.com/")
-
 st.caption("© 2026 AI投資アナリスト yuyu - 投資は自己責任でお願いします。")
