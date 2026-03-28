@@ -35,7 +35,7 @@ if st.button("AI診断を開始"):
                 
                 # 最も安定した呼び出し
                 response = client.models.generate_content(
-                    model="gemini-1.5-flash",
+                    model="gemini-2.0-flash",
                     contents=prompt
                 )
 
