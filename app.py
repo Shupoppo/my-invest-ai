@@ -1,7 +1,7 @@
 import streamlit as st
 import yfinance as yf
 import finnhub
-from google import genai
+import google.generativeai as genai
 from google.genai import types # 追加
 from datetime import datetime, timedelta
 
@@ -23,7 +23,8 @@ if st.button("AI診断を開始"):
         try:
             with st.spinner("分析中..."):
                 # 最新の接続ライブラリを使用
-                client = genai.Client(api_key=gemini_key)
+                genai.configure(api_key=gemini_key)
+model = genai.GenerativeModel("gemini-1.5-flash")
                 
                 # 財務データ取得
                 stock = yf.Ticker(ticker)
@@ -40,10 +41,7 @@ if st.button("AI診断を開始"):
                 prompt = f"銘柄:{ticker}, 株価:${info.get('currentPrice')}, ROE:{info.get('returnOnEquity',0)*100:.2f}%, EPS成長:{info.get('earningsGrowth',0)*100:.2f}%\nニュース:\n{news_list}\n上記から、長期投資の観点で買い増し推奨価格とブログ見出し案を日本語で回答して。"
                 
                 # 【ここが最重要修正】v1betaを回避し、安定版(v1)を強制指定
-                response = client.models.generate_content(
-                    model="gemini-1.5-flash-002",
-                    contents=prompt
-                )
+                response = model.generate_content(prompt)
 
                 # 結果表示
                 st.success(f"{ticker} の診断完了！")
