@@ -21,7 +21,7 @@ if st.button("AI診断を開始"):
         try:
             with st.spinner("分析中..."):
                 genai.configure(api_key=gemini_key)
-                model = genai.GenerativeModel('models/gemini-1.5-flash')
+                model = genai.GenerativeModel('gemini-1.5-flash')
                 finnhub_client = finnhub.Client(api_key=finnhub_key)
 
                 stock = yf.Ticker(ticker)
