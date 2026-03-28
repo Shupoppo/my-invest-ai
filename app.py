@@ -23,7 +23,7 @@ except Exception:
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_ai_analysis(ticker_symbol, info_dict, news_text):
     # yuyuさんのリストにあった最新モデルを指定
-    model = genai.Generative_model("gemini-2.0-flash") 
+    model = genai.GenerativeModel("gemini-2.0-flash")
     
     prompt = (
         f"あなたはプロの投資家『yuyu』として、ブログやYouTubeの視聴者に語りかけるように回答してください。\n\n"
