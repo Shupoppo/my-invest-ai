@@ -1,64 +1,54 @@
-import os
-from flask import Flask, render_template, request
+import streamlit as st
 import yfinance as yf
 import finnhub
-import google.generativeai as genai
+from google import genai
+from google.genai import types # 追加
 from datetime import datetime, timedelta
 
-app = Flask(__name__)
+# --- 画面の設定 ---
+st.set_page_config(page_title="AI投資アナリスト yuyu", layout="centered")
+st.title("📈 AI投資診断アプリ by yuyu")
 
-# --- APIキーの設定（環境変数から取得することを推奨） ---
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "YOUR_GEMINI_API_KEY")
-FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "YOUR_FINNHUB_API_KEY")
+# --- サイドバーで設定 ---
+st.sidebar.header("API設定")
+gemini_key = st.sidebar.text_input("Gemini API Key", type="password")
+finnhub_key = st.sidebar.text_input("Finnhub API Key", type="password")
 
-# --- AIとFinnhubの設定 ---
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-flash-latest') # Colabで動作確認済みのモデル
-finnhub_client = finnhub.Client(api_key=FINNHUB_API_KEY)
+ticker = st.text_input("銘柄コード (例: AAPL, 7203.T)", "AAPL").upper()
 
-@app.route('/', methods=['GET', 'POST'])
-def index():
-    report_result = None
-    ticker_symbol = "AAPL" # 初期値
-
-    if request.method == 'POST':
-        ticker_symbol = request.form['ticker'].upper()
+if st.button("AI診断を開始"):
+    if not gemini_key or not finnhub_key:
+        st.error("サイドバーにAPIキーを入力してください。")
+    else:
         try:
-            # 1. データ取得
-            stock = yf.Ticker(ticker_symbol)
-            info = stock.info
+            with st.spinner("分析中..."):
+                # 最新の接続ライブラリを使用
+                client = genai.Client(api_key=gemini_key)
+                
+                # 財務データ取得
+                stock = yf.Ticker(ticker)
+                info = stock.info
+                
+                # ニュース取得
+                finnhub_client = finnhub.Client(api_key=finnhub_key)
+                end_date = datetime.now().strftime('%Y-%m-%d')
+                start_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+                news = finnhub_client.company_news(ticker, _from=start_date, to=end_date)
+                news_list = "\n".join([f"- {n['headline']}" for n in news[:3]]) if news else "なし"
 
-            # ニュース取得（直近7日間）
-            end_date = datetime.now().strftime('%Y-%m-%d')
-            start_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
-            news = finnhub_client.company_news(ticker_symbol, _from=start_date, to=end_date)
-            news_list = "\n".join([f"- {n['headline']}" for n in news[:3]]) if news else "直近のニュースはありません。"
+                # AI診断用プロンプト
+                prompt = f"銘柄:{ticker}, 株価:${info.get('currentPrice')}, ROE:{info.get('returnOnEquity',0)*100:.2f}%, EPS成長:{info.get('earningsGrowth',0)*100:.2f}%\nニュース:\n{news_list}\n上記から、長期投資の観点で買い増し推奨価格とブログ見出し案を日本語で回答して。"
+                
+                # 【ここが最重要修正】v1betaを回避し、安定版(v1)を強制指定
+                response = client.models.generate_content(
+                    model="gemini-1.5-flash",
+                    contents=prompt
+                )
 
-            # 2. AIへの指示文
-            prompt = f"""
-            銘柄: {ticker_symbol}
-            現在価格: ${info.get('currentPrice', 'N/A')}
-            ROE: {info.get('returnOnEquity', 0)*100:.2f}%
-            EPS成長率: {info.get('earningsGrowth', 0)*100:.2f}%
-            PER: {info.get('trailingPE', 'N/A')}
-
-            ニュース:
-            {news_list}
-
-            上記データを踏まえ、長期投資の観点で「買い増し推奨価格」と「今後の見通し」を日本語で簡潔に教えてください。
-            最後にブログ記事用のキャッチーなタイトル案も1つお願いします。
-            """
-
-            # 3. AI診断実行
-            response = model.generate_content(prompt)
-            report_result = response.text
-
+                # 結果表示
+                st.success(f"{ticker} の診断完了！")
+                st.markdown(response.text)
+                
         except Exception as e:
-            report_result = f"エラーが発生しました: {e}\nAPIキーが正しく設定されているか、銘柄コードが正しいか確認してください。"
-
-    return render_template('index.html', report=report_result, ticker=ticker_symbol)
-
-if __name__ == '__main__':
-    # Colabで実行する場合、port=8000 などを使用すると良い
-    # 実際のデプロイでは、通常はウェブサーバー（Gunicornなど）が管理します
-    app.run(host='0.0.0.0', port=5000, debug=True)
+            # エラーの詳細をより詳しく表示
+            st.error(f"エラーが発生しました: {e}")
