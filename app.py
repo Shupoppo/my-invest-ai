@@ -7,6 +7,12 @@ from datetime import datetime, timedelta
 st.set_page_config(page_title="AI投資アナリスト yuyu", layout="centered")
 st.title("📈 AI投資診断アプリ by yuyu")
 
+# サイドバーに「今使えるモデル一覧」を出すデバッグ用
+if st.sidebar.button("利用可能なモデルをリストアップ"):
+    temp_client = genai.Client(api_key=gemini_key)
+    for m in temp_client.models.list():
+        st.sidebar.code(m.name)
+
 st.sidebar.header("API設定")
 gemini_key = st.sidebar.text_input("Gemini API Key", type="password")
 finnhub_key = st.sidebar.text_input("Finnhub API Key", type="password")
