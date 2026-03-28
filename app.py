@@ -41,7 +41,7 @@ if st.button("AI診断を開始"):
                 
                 # 【ここが最重要修正】v1betaを回避し、安定版(v1)を強制指定
                 response = client.models.generate_content(
-                    model="gemini-1.5-flash",
+                    model="gemini-1.5-flash-002",
                     contents=prompt
                 )
 
