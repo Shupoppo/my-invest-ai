@@ -12,8 +12,8 @@ st.caption("世界最新のAIモデルによる銘柄分析（ROE・EPS・最新
 # --- 1. セキュリティ設定（Secretsから読み込み） ---
 # 公開時はStreamlit Cloudの管理画面で設定します
 try:
-    gemini_key = st.secrets["GEMINI_API_KEY"]
-    finnhub_key = st.secrets["FINNHUB_API_KEY"]
+    gemini_key = st.secrets["AIzaSyDilfS86s6m0lelSt1a0tczn22-oHRbZHw"]
+    finnhub_key = st.secrets["d73squhr01qno4pvjll0d73squhr01qno4pvjllg"]
     genai.configure(api_key=gemini_key)
 except:
     st.error("システム設定エラー：APIキーが見つかりません。")
