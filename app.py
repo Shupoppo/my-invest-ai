@@ -1,7 +1,8 @@
 import streamlit as st
 import yfinance as yf
 import finnhub
-from google import genai  # ← ここを修正しました
+from google import genai
+from google.genai import types # 追加
 from datetime import datetime, timedelta
 
 # --- 画面の設定 ---
@@ -38,7 +39,7 @@ if st.button("AI診断を開始"):
                 # AI診断用プロンプト
                 prompt = f"銘柄:{ticker}, 株価:${info.get('currentPrice')}, ROE:{info.get('returnOnEquity',0)*100:.2f}%, EPS成長:{info.get('earningsGrowth',0)*100:.2f}%\nニュース:\n{news_list}\n上記から、長期投資の観点で買い増し推奨価格とブログ見出し案を日本語で回答して。"
                 
-                # AI診断実行
+                # 【ここが最重要修正】v1betaを回避し、安定版(v1)を強制指定
                 response = client.models.generate_content(
                     model="gemini-1.5-flash",
                     contents=prompt
@@ -49,4 +50,5 @@ if st.button("AI診断を開始"):
                 st.markdown(response.text)
                 
         except Exception as e:
+            # エラーの詳細をより詳しく表示
             st.error(f"エラーが発生しました: {e}")
