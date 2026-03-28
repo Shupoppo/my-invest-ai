@@ -38,23 +38,22 @@ if st.button("AIフル分析を実行"):
             news = finnhub_client.company_news(ticker, _from=start_date, to=end_date)
             news_list = "\n".join([f"- {n['headline']}" for n in news[:5]]) if news else "直近の重要ニュースなし"
 
-            # プロンプト（yuyuさんのこだわりを凝縮）
-            prompt = (
-                f"あなたはプロの投資家『yuyu』として、ブログやYouTubeの視聴者に語りかけるように回答してください。\n\n"
-                f"【分析データ】\n"
-                f"銘柄: {ticker}\n"
-                f"現在価格: ${info.get('currentPrice', '不明')}\n"
-                f"ROE: {info.get('returnOnEquity', 0)*100:.2f}%\n"
-                f"EPS成長率: {info.get('earningsGrowth', 0)*100:.2f}%\n"
-                f"PER: {info.get('forwardPE', '不明')}\n"
-                f"ニュース概要: {news_list}\n\n"
-                f"【依頼】\n"
-                f"1. ROEとEPSの推移から見た企業の「稼ぐ力」の評価\n"
-                f"2. ニュースを踏まえた短期的・長期的な展望\n"
-                f"3. yuyu流の『買い増し推奨価格』の提示（何ドルまでなら割安か）\n"
-                f"4. ブログやSNSで目を引くキャッチコピー案\n"
-                f"以上を、親しみやすくも鋭い視点で日本語で解説してください。"
-            )
+            # --- AIへのプロンプト作成（キャッチコピー案を削除したVer.） ---
+prompt = (
+    f"あなたはプロの投資家『yuyu』として、ブログやYouTubeの視聴者に語りかけるように回答してください。\n\n"
+    f"【分析データ】\n"
+    f"銘柄: {ticker}\n"
+    f"現在価格: ${info.get('currentPrice', '不明')}\n"
+    f"ROE: {info.get('returnOnEquity', 0)*100:.2f}%\n"
+    f"EPS成長率: {info.get('earningsGrowth', 0)*100:.2f}%\n"
+    f"PER: {info.get('forwardPE', '不明')}\n"
+    f"ニュース概要: {news_list}\n\n"
+    f"【依頼】\n"
+    f"1. ROEとEPSの推移から見た企業の「稼ぐ力」を、yuyu流の鋭い視点で評価してください。\n"
+    f"2. 直近のニュースを踏まえた、短期的・長期的な展望を解説してください。\n"
+    f"3. 長期投資の観点から、具体的に『何ドルまでなら割安と言えるか（買い増し推奨価格）』を根拠とともに提示してください。\n\n"
+    f"※SNSやブログ用のキャッチコピー案は不要です。分析結果のみを、親しみやすくもプロらしい日本語で詳しく回答してください。"
+)
             
             response = model.generate_content(prompt)
 
