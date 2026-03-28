@@ -78,6 +78,6 @@ st.info("※この分析はAIによる予測であり、投資の最終決定は
 # --- ブログへの誘導（シンプル版） ---
 st.markdown("---")
 st.write("💡 **最新の銘柄分析や投資戦略はブログで詳しく解説中！**")
-st.link_button("📝 yuyuの投資ブログをチェックする", "https://あなたのブログURL")
+st.link_button("📝 yuyuの投資ブログをチェックする", "https://bodymoneymakers.com/")
 
 st.caption("© 2026 AI投資アナリスト yuyu - 投資は自己責任でお願いします。")
