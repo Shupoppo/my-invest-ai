@@ -64,7 +64,7 @@ if st.button("AIフル分析を実行"):
             st.markdown(response.text)
             
     except Exception as e:
-        st.error(f"分析中にエラーが発生しました。銘柄コードが正しいか確認してください。")
+        st.error(f"詳細エラー: {e}") # これで本当の原因（401, 404, 429など）が見えます
 
 st.markdown("---")
 st.info("※この分析はAIによる予測であり、投資の最終決定はご自身の判断で行ってください。")
