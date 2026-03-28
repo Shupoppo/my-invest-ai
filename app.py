@@ -20,7 +20,13 @@ except:
     st.stop()
 
 # --- 2. ユーザー入力 ---
-ticker = st.text_input("分析したい銘柄コードを入力してください (例: AAPL, NVDA, 7203.T)", "NVDA").upper()
+raw_input = st.text_input("銘柄コード (例: AAPL, 7203, NVDA)", "NVDA").strip()
+
+# 入力が数字4桁なら、自動で東証の「.T」を付与する
+if raw_input.isdigit() and len(raw_input) == 4:
+    ticker = f"{raw_input}.T"
+else:
+    ticker = raw_input.upper()
 
 if st.button("AIフル分析を実行"):
         try:
