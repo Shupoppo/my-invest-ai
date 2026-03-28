@@ -27,7 +27,7 @@ if st.button("AI診断を開始"):
                 # --- Geminiの設定 (404エラーを回避する安定版の書き方) ---
                 genai.configure(api_key=gemini_key)
                 # モデル名は「gemini-1.5-flash」が最も安定して動作します
-                model = genai.GenerativeModel("gemini-1.5-flash")
+                model = genai.GenerativeModel("gemini-2.0-flash-exp")
                 
                 # --- yfinanceで株価・指標データを取得 ---
                 stock = yf.Ticker(ticker)
