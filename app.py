@@ -1,71 +1,70 @@
 import streamlit as st
 import yfinance as yf
 import finnhub
-import google.generativeai as genai  # 旧来の安定したライブラリ形式に変更
+import google.generativeai as genai
 from datetime import datetime, timedelta
 
 # アプリの基本設定
-st.set_page_config(page_title="AI投資アナリスト yuyu", layout="centered")
+st.set_page_config(page_title="AI投資アナリスト yuyu", layout="wide")
 st.title("📈 AI投資診断アプリ by yuyu")
+st.caption("世界最新のAIモデルによる銘柄分析（ROE・EPS・最新ニュース重視）")
 
-# --- 1. サイドバーでAPIキーを取得（必ず先に定義する） ---
-st.sidebar.header("API設定")
-gemini_key = st.sidebar.text_input("Gemini API Key", type="password")
-finnhub_key = st.sidebar.text_input("Finnhub API Key", type="password")
+# --- 1. セキュリティ設定（Secretsから読み込み） ---
+# 公開時はStreamlit Cloudの管理画面で設定します
+try:
+    gemini_key = st.secrets["GEMINI_API_KEY"]
+    finnhub_key = st.secrets["FINNHUB_API_KEY"]
+    genai.configure(api_key=gemini_key)
+except:
+    st.error("システム設定エラー：APIキーが見つかりません。")
+    st.stop()
 
-# --- 2. メイン画面の入力 ---
-ticker = st.text_input("銘柄コード (例: AAPL, 7203.T)", "AAPL").upper()
+# --- 2. ユーザー入力 ---
+ticker = st.text_input("分析したい銘柄コードを入力してください (例: AAPL, NVDA, 7203.T)", "NVDA").upper()
 
-# --- 3. 診断ロジック ---
-if st.button("AI診断を開始"):
-    # キーが入力されているかチェック
-    if not gemini_key or not finnhub_key:
-        st.error("サイドバーに Gemini API Key と Finnhub API Key を入力してください。")
-    else:
-        try:
-            with st.spinner(f"{ticker} のデータを分析中..."):
-                # --- Geminiの設定 (404エラーを回避する安定版の書き方) ---
-                genai.configure(api_key=gemini_key)
-                # モデル名は「gemini-1.5-flash」が最も安定して動作します
-                model = genai.GenerativeModel("gemini-3-flash-preview")
-                
-                # --- yfinanceで株価・指標データを取得 ---
-                stock = yf.Ticker(ticker)
-                info = stock.info
-                
-                # --- Finnhubで最新ニュースを取得 ---
-                finnhub_client = finnhub.Client(api_key=finnhub_key)
-                end_date = datetime.now().strftime('%Y-%m-%d')
-                start_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
-                news = finnhub_client.company_news(ticker, _from=start_date, to=end_date)
-                news_list = "\n".join([f"- {n['headline']}" for n in news[:3]]) if news else "直近の関連ニュースはありません。"
+if st.button("AIフル分析を実行"):
+    try:
+        with st.spinner(f"最新モデルで {ticker} を多角的に分析中..."):
+            # モデル名は、yuyuさんのリストにあった最新版を指定
+            model = genai.GenerativeModel("gemini-3-flash-preview") 
+            
+            # データ取得
+            stock = yf.Ticker(ticker)
+            info = stock.info
+            finnhub_client = finnhub.Client(api_key=finnhub_key)
+            
+            end_date = datetime.now().strftime('%Y-%m-%d')
+            start_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+            news = finnhub_client.company_news(ticker, _from=start_date, to=end_date)
+            news_list = "\n".join([f"- {n['headline']}" for n in news[:5]]) if news else "直近の重要ニュースなし"
 
-                # --- AIへのプロンプト作成 ---
-                # yuyuさんの分析視点（ROE, EPS）を盛り込んでいます
-                prompt = (
-                    f"あなたはプロの投資アナリスト『yuyu』として回答してください。\n\n"
-                    f"【銘柄情報】\n"
-                    f"銘柄名: {ticker}\n"
-                    f"現在株価: ${info.get('currentPrice', '取得不可')}\n"
-                    f"ROE: {info.get('returnOnEquity', 0)*100:.2f}%\n"
-                    f"EPS成長率: {info.get('earningsGrowth', 0)*100:.2f}%\n\n"
-                    f"【最新ニュース】\n"
-                    f"{news_list}\n\n"
-                    f"上記データに基づき、長期投資の観点から「いくらまでなら割安と言えるか（買い増し推奨価格）」と、"
-                    f"投資ブログ・YouTubeで使える「キャッチーな見出し案」を日本語で詳しく回答してください。"
-                )
-                
-                # --- AIによる生成実行 ---
-                response = model.generate_content(prompt)
+            # プロンプト（yuyuさんのこだわりを凝縮）
+            prompt = (
+                f"あなたはプロの投資家『yuyu』として、ブログやYouTubeの視聴者に語りかけるように回答してください。\n\n"
+                f"【分析データ】\n"
+                f"銘柄: {ticker}\n"
+                f"現在価格: ${info.get('currentPrice', '不明')}\n"
+                f"ROE: {info.get('returnOnEquity', 0)*100:.2f}%\n"
+                f"EPS成長率: {info.get('earningsGrowth', 0)*100:.2f}%\n"
+                f"PER: {info.get('forwardPE', '不明')}\n"
+                f"ニュース概要: {news_list}\n\n"
+                f"【依頼】\n"
+                f"1. ROEとEPSの推移から見た企業の「稼ぐ力」の評価\n"
+                f"2. ニュースを踏まえた短期的・長期的な展望\n"
+                f"3. yuyu流の『買い増し推奨価格』の提示（何ドルまでなら割安か）\n"
+                f"4. ブログやSNSで目を引くキャッチコピー案\n"
+                f"以上を、親しみやすくも鋭い視点で日本語で解説してください。"
+            )
+            
+            response = model.generate_content(prompt)
 
-                # --- 結果の表示 ---
-                st.success(f"{ticker} の診断が完了しました！")
-                st.markdown("---")
-                st.markdown(response.text)
-                
-        except Exception as e:
-            # 万が一エラーが出た場合、内容を表示する
-            st.error(f"診断中にエラーが発生しました: {e}")
+            # 結果表示
+            st.success("分析が完了しました！")
+            st.markdown("---")
+            st.markdown(response.text)
+            
+    except Exception as e:
+        st.error(f"分析中にエラーが発生しました。銘柄コードが正しいか確認してください。")
 
-# フッター
-st.caption("© 2026 AI投資アナリスト yuyu - 投資は自己責任でお願いします。")
+st.markdown("---")
+st.info("※この分析はAIによる予測であり、投資の最終決定はご自身の判断で行ってください。")
