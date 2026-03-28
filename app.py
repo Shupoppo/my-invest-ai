@@ -27,7 +27,12 @@ if raw_input.isdigit() and len(raw_input) == 4:
     ticker = f"{raw_input}.T"
 else:
     ticker = raw_input.upper()
+# --- 注意書きの追加 ---
+st.warning("""
+**⚠️ ご利用上の注意** 現在、無料枠で運営しているため、アクセスが集中すると「429 Quota Exceeded」というエラーが出ることがあります。その場合は、**1〜5分ほど時間を置いてから**再度実行してみてください。
+""")
 
+# この下に st.button("AIフル分析を実行") が来るように配置
 if st.button("AIフル分析を実行"):
         try:
             with st.spinner(f"最新モデルで {ticker} を多角的に分析中..."):
