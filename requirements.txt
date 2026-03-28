@@ -1,0 +1,4 @@
+google-generativeai
+yfinance
+finnhub-python
+streamlit
