@@ -1,8 +1,7 @@
 import streamlit as st
 import yfinance as yf
 import finnhub
-import google.generativeai as genai
-import google.ai.generativelanguage as gapic # 追加
+from google import genai  # ← ここを修正しました
 from datetime import datetime, timedelta
 
 # --- 画面の設定 ---
@@ -14,7 +13,7 @@ st.sidebar.header("API設定")
 gemini_key = st.sidebar.text_input("Gemini API Key", type="password")
 finnhub_key = st.sidebar.text_input("Finnhub API Key", type="password")
 
-ticker = st.text_input("銘銘コード (例: AAPL, 7203.T)", "AAPL").upper()
+ticker = st.text_input("銘柄コード (例: AAPL, 7203.T)", "AAPL").upper()
 
 if st.button("AI診断を開始"):
     if not gemini_key or not finnhub_key:
@@ -22,8 +21,8 @@ if st.button("AI診断を開始"):
     else:
         try:
             with st.spinner("分析中..."):
-                # 【ここが最重要修正】v1betaではなく、安定版のv1を強制使用する設定
-                client = genai.Client(api_key=gemini_key, transport='rest')
+                # 最新の接続ライブラリを使用
+                client = genai.Client(api_key=gemini_key)
                 
                 # 財務データ取得
                 stock = yf.Ticker(ticker)
@@ -39,7 +38,7 @@ if st.button("AI診断を開始"):
                 # AI診断用プロンプト
                 prompt = f"銘柄:{ticker}, 株価:${info.get('currentPrice')}, ROE:{info.get('returnOnEquity',0)*100:.2f}%, EPS成長:{info.get('earningsGrowth',0)*100:.2f}%\nニュース:\n{news_list}\n上記から、長期投資の観点で買い増し推奨価格とブログ見出し案を日本語で回答して。"
                 
-                # 【ここを修正】最新の呼び出し方式に変更
+                # AI診断実行
                 response = client.models.generate_content(
                     model="gemini-1.5-flash",
                     contents=prompt
