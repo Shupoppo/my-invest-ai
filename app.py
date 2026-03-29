@@ -44,6 +44,7 @@ with st.sidebar:
             user = st.text_input("ユーザーID")
             pw = st.text_input("パスワード", type="password")
             if st.form_submit_button("ログイン"):
+                # ユーザーIDとパスワードの照合（文字列として比較）
                 match = user_db[(user_db['username'].astype(str) == user) & (user_db['password'].astype(str) == pw)]
                 if not match.empty:
                     st.session_state.authenticated = True
@@ -81,31 +82,44 @@ if st.button("AIフル分析を実行"):
     else:
         try:
             with st.spinner(f"最新のAIが {ticker} を分析中..."):
-                # データ取得
+                # 1. データ取得 (yfinance)
                 stock = yf.Ticker(ticker)
                 info = stock.info
                 
-                # ニュース取得
-                finnhub_client = finnhub.Client(api_key=st.secrets["FINNHUB_API_KEY"])
-                end_date = datetime.now().strftime('%Y-%m-%d')
-                start_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
-                news = finnhub_client.company_news(ticker, _from=start_date, to=end_date)
-                news_summary = "\n".join([f"- {n['headline']}" for n in news[:5]]) if news else "直近ニュースなし"
+                # 【修正ポイント①】 データ欠損エラー（None）対策
+                roe_raw = info.get('returnOnEquity')
+                roe_percent = (roe_raw * 100) if roe_raw is not None else 0.0
+                
+                eps_raw = info.get('earningsGrowth')
+                eps_percent = (eps_raw * 100) if eps_raw is not None else 0.0
 
-                # プロンプトの切り替え（有料/無料）
+                # 2. ニュース取得 (Finnhub)
+                # 【修正ポイント②】 日本株などでニュースが取得できない場合のエラー回避
+                news_summary = "直近ニュースなし"
+                try:
+                    finnhub_client = finnhub.Client(api_key=st.secrets["FINNHUB_API_KEY"])
+                    end_date = datetime.now().strftime('%Y-%m-%d')
+                    start_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+                    news = finnhub_client.company_news(ticker, _from=start_date, to=end_date)
+                    if news:
+                        news_summary = "\n".join([f"- {n['headline']}" for n in news[:5]])
+                except Exception:
+                    pass # エラー時はデフォルトの「直近ニュースなし」のまま進む
+
+                # 3. プロンプトの切り替え（有料/無料）
                 if is_premium:
                     prompt = (
                         f"あなたはプロの投資家『yuyu』として詳細に回答してください。\n"
-                        f"銘柄:{ticker}、ROE:{info.get('returnOnEquity',0)*100:.2f}%、EPS成長:{info.get('earningsGrowth',0)*100:.2f}%。\n"
+                        f"銘柄:{ticker}、ROE:{roe_percent:.2f}%、EPS成長:{eps_percent:.2f}%。\n"
                         f"ニュース:{news_summary}\n\n"
-                        f"【依頼】ROE/EPSから見た『企業の稼ぐ力』を深掘りし、今後の展望と、具体的な『買い増し推奨価格（何ドルまでなら割安か）』を根拠とともに詳しく解説してください。"
+                        f"【依頼】ROE/EPS、公表されているIRの決算でわかる内容から見た『企業の稼ぐ力』を深掘りし、今後の展望と、具体的な『買い増し推奨価格（何ドルぐらいまでなら上がっても割安で買えるのか）』を根拠とともに詳しく解説してください。"
                     )
                 else:
                     prompt = (
                         f"銘柄:{ticker}のROEとEPSから見た『稼ぐ力』を100文字以内で簡潔に評価してください。具体的な推奨価格などの詳細は伏せてください。"
                     )
 
-                # AI分析実行（Gemini 2.0 Flash）
+                # 4. AI分析実行（Gemini 2.0 Flash）
                 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
                 model = genai.GenerativeModel("gemini-2.0-flash")
                 response = model.generate_content(prompt)
@@ -118,7 +132,7 @@ if st.button("AIフル分析を実行"):
                     st.session_state.usage_count += 1
                     
         except Exception as e:
-            st.error(f"詳細エラー: {e}")
+            st.error(f"分析中にエラーが発生しました。銘柄コードが正しいか確認してください。\n詳細: {e}")
 
 # --- 6. 画面下部：ブログ誘導 & 比較案内 ---
 st.markdown("---")
