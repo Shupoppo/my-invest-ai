@@ -112,7 +112,7 @@ if st.button("AIフル分析を実行"):
 
                 # AI実行 (最新のGA版モデル名を指定)
                 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                model = genai.GenerativeModel("gemini-2.0-flash")
+                model = genai.GenerativeModel("gemini-1.5-flash")
                 response = model.generate_content(prompt)
 
                 st.markdown("---")
