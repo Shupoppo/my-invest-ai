@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 st.set_page_config(page_title="AI投資アナリスト yuyu Premium", layout="centered")
 
 # --- 1. ユーザーデータベースの読み込み ---
-@st.cache_data(ttl=300) # 5分ごとに自動更新されるため、手動ボタンは不要
+@st.cache_data(ttl=300)
 def load_user_data():
     try:
         sheet_url = st.secrets["USER_SHEET_URL"]
@@ -53,6 +53,13 @@ with st.sidebar:
     else:
         st.write(f"👤 **{st.session_state.user_info['name']} 様**")
         st.success("プレミアム権限：有効")
+        
+        # --- 💳 Stripe解約・管理ボタンの追加 ---
+        st.markdown("---")
+        st.subheader("⚙️ 会員設定")
+        stripe_portal_url = "https://billing.stripe.com/p/login/6oUbJ10Nsd4X9ym90S0Fi00"
+        st.link_button("💳 お支払い情報の管理・解約", stripe_portal_url)
+        
         if st.button("ログアウト"):
             st.session_state.authenticated = False
             st.session_state.user_info = None
