@@ -110,9 +110,9 @@ if st.button("AIフル分析を実行"):
                         f"銘柄:{ticker}のROEとEPSから見た『稼ぐ力』を100文字以内で簡潔に評価してください。具体的な推奨価格などの詳細は伏せてください。"
                     )
 
-                # AI実行 (最新モデル指定)
+                # AI実行 (最新のGA版モデル名を指定)
                 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                model = genai.GenerativeModel("gemini-2.0-flash-001")
+                model = genai.GenerativeModel("gemini-2.0-flash")
                 response = model.generate_content(prompt)
 
                 st.markdown("---")
