@@ -16,6 +16,7 @@ def load_user_data():
         df = pd.read_csv(sheet_url)
         return df
     except Exception:
+        # 読み込み失敗時のバックアップ
         return pd.DataFrame(columns=["username", "password", "name"])
 
 user_db = load_user_data()
@@ -42,7 +43,9 @@ with st.sidebar:
             user = st.text_input("ユーザーID")
             pw = st.text_input("パスワード", type="password")
             if st.form_submit_button("ログイン"):
-                match = user_db[(user_db['username'].astype(str) == user) & (user_db['password'].astype(str) == pw)]
+                # IDとパスワードの照合
+                match = user_db[(user_db['username'].astype(str).str.strip() == user.strip()) & 
+                                (user_db['password'].astype(str).str.strip() == pw.strip())]
                 if not match.empty:
                     st.session_state.authenticated = True
                     st.session_state.user_info = match.iloc[0]
@@ -66,6 +69,7 @@ if not is_premium:
     st.info(f"💡 無料版：本日の残り利用回数 {max(0, 3 - st.session_state.usage_count)} 回")
 
 raw_input = st.text_input("銘柄コードを入力 (例: AAPL, 7203, NVDA)", "NVDA").strip()
+# 日本株（4桁数字）の場合は自動で .T を付与
 ticker = f"{raw_input}.T" if (raw_input.isdigit() and len(raw_input) == 4) else raw_input.upper()
 
 # --- 5. 分析実行 ---
@@ -76,7 +80,7 @@ if st.button("AIフル分析を実行"):
     else:
         try:
             with st.spinner(f"最新のAIが {ticker} を分析中..."):
-                # データ取得
+                # データ取得 (yfinance)
                 stock = yf.Ticker(ticker)
                 info = stock.info
                 
@@ -85,8 +89,8 @@ if st.button("AIフル分析を実行"):
                 eps_raw = info.get('earningsGrowth')
                 eps_percent = (eps_raw * 100) if eps_raw is not None else 0.0
 
-                # ニュース取得
-                news_summary = "直近ニュースなし"
+                # ニュース取得 (Finnhub)
+                news_summary = "直近1週間の重要ニュースなし"
                 try:
                     finnhub_client = finnhub.Client(api_key=st.secrets["FINNHUB_API_KEY"])
                     end_date = datetime.now().strftime('%Y-%m-%d')
@@ -100,19 +104,21 @@ if st.button("AIフル分析を実行"):
                 # プロンプト設定
                 if is_premium:
                     prompt = (
-                        f"あなたはプロの投資家『yuyu』として詳細に回答してください。\n"
+                        f"あなたは2000万円を運用する投資ブロガー『yuyu』です。プロの証券マンの視点で詳細に回答してください。\n"
                         f"銘柄:{ticker}、ROE:{roe_percent:.2f}%、EPS成長:{eps_percent:.2f}%。\n"
-                        f"ニュース:{news_summary}\n\n"
-                        f"【依頼】ROE/EPS、公表されているIRの決算内容から見た『企業の稼ぐ力』を深掘りし、今後の展望と、具体的な『買い増し推奨価格（何ドルぐらいまでなら上がっても割安で買えるのか）』を根拠とともに詳しく解説してください。"
+                        f"最近のニュース:\n{news_summary}\n\n"
+                        f"【依頼】これらの数値を踏まえ、企業の『稼ぐ力』を分析してください。また、現在の市況から見て『何ドル（何円）までなら上がっても割安で買えるのか』という買い増し推奨価格を、具体的な根拠とともに提示してください。"
                     )
                 else:
                     prompt = (
-                        f"銘柄:{ticker}のROEとEPSから見た『稼ぐ力』を100文字以内で簡潔に評価してください。具体的な推奨価格などの詳細は伏せてください。"
+                        f"銘柄:{ticker}のROE({roe_percent:.2f}%)とEPS成長率({eps_percent:.2f}%)から見た企業の評価を、100文字以内で簡潔に教えてください。具体的な推奨価格は伏せてください。"
                     )
 
-                # AI実行 (最新のGA版モデル名を指定)
+                # AI実行 (安定版 gemini-1.5-flash)
                 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
                 model = genai.GenerativeModel("gemini-1.5-flash")
+                
+                # 安全に生成を実行
                 response = model.generate_content(prompt)
 
                 st.markdown("---")
@@ -122,7 +128,7 @@ if st.button("AIフル分析を実行"):
                     st.session_state.usage_count += 1
                     
         except Exception as e:
-            st.error(f"分析エラー：銘柄データが見つからないか、APIの制限です。時間をおいて試してください。\n詳細: {e}")
+            st.error(f"分析中にエラーが発生しました。銘柄コードが正しいか確認してください。\n詳細: {e}")
 
 # --- 6. 案内 ---
 st.markdown("---")
@@ -131,10 +137,10 @@ if not is_premium:
     col1, col2 = st.columns(2)
     with col1:
         st.write("**無料版（現在）**")
-        st.write("・1日3回まで / 簡易コメント")
+        st.write("・1日3回まで / 簡易コメントのみ")
     with col2:
         st.write("**プレミアム版（Premium）**")
-        st.write("・✨ **回数無制限 / 目標株価解放**")
+        st.write("・✨ **回数無制限 / 目標株価・買い増しライン提示**")
     st.link_button("💎 プレミアム会員の詳細・登録はこちら", "https://bodymoneymakers.com/premium")
 
 st.info("※投資の最終決定はご自身の判断で行ってください。")
