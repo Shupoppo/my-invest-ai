@@ -40,9 +40,15 @@ with st.sidebar:
             user_input = st.text_input("ユーザーID（メールアドレス）")
             pw_input = st.text_input("パスワード", type="password")
             submit = st.form_submit_button("ログイン")
-st.subheader("🔑 会員ログイン")
-        st.write(f"現在の登録ユーザー数: {len(user_db)}名") # ← これを足す！
+
+            if not st.session_state.authenticated:
+        st.subheader("🔑 会員ログイン")
+        st.write(f"現在の登録ユーザー数: {len(user_db)}名")
         with st.form("login_sidebar"):
+            user_input = st.text_input("ユーザーID（メールアドレス）")
+            pw_input = st.text_input("パスワード", type="password")
+            submit = st.form_submit_button("ログイン")
+
             
             if submit:
                 # 前後の空白を消して照合（入力ミス防止）
