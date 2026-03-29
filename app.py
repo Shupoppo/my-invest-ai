@@ -9,14 +9,16 @@ from datetime import datetime, timedelta
 st.set_page_config(page_title="AI投資アナリスト yuyu Premium", layout="centered")
 
 # --- 1. ユーザーデータベース（Googleスプレッドシート）の読み込み ---
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=300) # キャッシュを5分（300秒）に短縮して反映を速くしました
 def load_user_data():
     try:
         sheet_url = st.secrets["USER_SHEET_URL"]
         df = pd.read_csv(sheet_url)
+        # カラム名の前後の空白を削除して不一致を防止
+        df.columns = df.columns.str.strip()
         return df
-    except Exception:
-        # 読み込み失敗時のバックアップ
+    except Exception as e:
+        st.error(f"シート読み込みエラー: {e}")
         return pd.DataFrame(columns=["username", "password", "name"])
 
 user_db = load_user_data()
@@ -31,30 +33,39 @@ if "usage_count" not in st.session_state:
 # --- 3. サイドバー：ログイン管理 ---
 with st.sidebar:
     st.title("💎 Premium Plan")
+    
     if not st.session_state.authenticated:
-        st.write("有料会員になると：")
-        st.write("✅ 1日の利用回数が**無制限**")
-        st.write("✅ yuyu流の**買い増し推奨価格**を表示")
-        st.write("✅ 最新ニュースの**詳細分析**を解放")
-        st.link_button("👉 有料プランに申し込む", "https://bodymoneymakers.com/premium")
-        st.markdown("---")
         st.subheader("🔑 会員ログイン")
         with st.form("login_sidebar"):
-            user = st.text_input("ユーザーID")
-            pw = st.text_input("パスワード", type="password")
-            if st.form_submit_button("ログイン"):
-                # IDとパスワードの照合
-                match = user_db[(user_db['username'].astype(str).str.strip() == user.strip()) & 
-                                (user_db['password'].astype(str).str.strip() == pw.strip())]
+            user_input = st.text_input("ユーザーID（メールアドレス）")
+            pw_input = st.text_input("パスワード", type="password")
+            submit = st.form_submit_button("ログイン")
+            
+            if submit:
+                # 前後の空白を消して照合（入力ミス防止）
+                u = user_input.strip()
+                p = pw_input.strip()
+                
+                match = user_db[(user_db['username'].astype(str).str.strip() == u) & 
+                                (user_db['password'].astype(str).str.strip() == p)]
+                
                 if not match.empty:
                     st.session_state.authenticated = True
                     st.session_state.user_info = match.iloc[0]
+                    st.success(f"ようこそ、{st.session_state.user_info['name']} 様")
                     st.rerun()
                 else:
-                    st.error("IDまたはパスワードが違います")
+                    st.error("IDまたはパスワードが正しくありません")
+        
+        st.markdown("---")
+        st.write("✨ **有料会員のメリット**")
+        st.write("・AI分析が**回数無制限**")
+        st.write("・yuyu流 **買い増し推奨価格** を表示")
+        st.link_button("👉 有料プランに申し込む", "https://bodymoneymakers.com/premium")
+    
     else:
         st.write(f"👤 **{st.session_state.user_info['name']} 様**")
-        st.success("プレミアムプラン適用中")
+        st.success("プレミアムプラン適用中（無制限）")
         if st.button("ログアウト"):
             st.session_state.authenticated = False
             st.session_state.user_info = None
@@ -64,23 +75,28 @@ with st.sidebar:
 st.title("📈 AI投資診断アプリ by yuyu")
 st.caption("最新のAIモデルによる銘柄分析（ROE・EPS・最新ニュース重視）")
 
+# プレミアム判定
 is_premium = st.session_state.authenticated
+
 if not is_premium:
-    st.info(f"💡 無料版：本日の残り利用回数 {max(0, 3 - st.session_state.usage_count)} 回")
+    remaining = max(0, 3 - st.session_state.usage_count)
+    st.info(f"💡 無料版：本日の残り利用回数 {remaining} 回")
+else:
+    st.success("✨ プレミアム権限により、分析回数は無制限です。")
 
 raw_input = st.text_input("銘柄コードを入力 (例: AAPL, 7203, NVDA)", "NVDA").strip()
-# 日本株（4桁数字）の場合は自動で .T を付与
 ticker = f"{raw_input}.T" if (raw_input.isdigit() and len(raw_input) == 4) else raw_input.upper()
 
 # --- 5. 分析実行 ---
 if st.button("AIフル分析を実行"):
+    # 無料ユーザーかつ回数切れの場合
     if not is_premium and st.session_state.usage_count >= 3:
-        st.error("本日の無料枠を超えました。プレミアム会員に登録すると無制限でご利用いただけます！")
-        st.link_button("💎 プレミアム会員の登録はこちら", "https://bodymoneymakers.com/premium")
+        st.error("本日の無料枠（3回）を超えました。")
+        st.link_button("💎 プレミアム会員登録で制限を解除", "https://bodymoneymakers.com/premium")
     else:
         try:
             with st.spinner(f"最新のAIが {ticker} を分析中..."):
-                # データ取得 (yfinance)
+                # データ取得
                 stock = yf.Ticker(ticker)
                 info = stock.info
                 
@@ -89,7 +105,7 @@ if st.button("AIフル分析を実行"):
                 eps_raw = info.get('earningsGrowth')
                 eps_percent = (eps_raw * 100) if eps_raw is not None else 0.0
 
-                # ニュース取得 (Finnhub)
+                # ニュース取得
                 news_summary = "直近1週間の重要ニュースなし"
                 try:
                     finnhub_client = finnhub.Client(api_key=st.secrets["FINNHUB_API_KEY"])
@@ -101,46 +117,39 @@ if st.button("AIフル分析を実行"):
                 except:
                     pass
 
-                # プロンプト設定
+                # プロンプト出し分け
                 if is_premium:
                     prompt = (
-                        f"あなたは2000万円を運用する投資ブロガー『yuyu』です。プロの証券マンの視点で詳細に回答してください。\n"
+                        f"あなたは2000万円を運用する投資家『yuyu』です。プロの証券マンの視点で詳細に回答してください。\n"
                         f"銘柄:{ticker}、ROE:{roe_percent:.2f}%、EPS成長:{eps_percent:.2f}%。\n"
-                        f"最近のニュース:\n{news_summary}\n\n"
-                        f"【依頼】これらの数値を踏まえ、企業の『稼ぐ力』を分析してください。また、現在の市況から見て『何ドル（何円）までなら上がっても割安で買えるのか』という買い増し推奨価格を、具体的な根拠とともに提示してください。"
+                        f"最新ニュース:\n{news_summary}\n\n"
+                        f"【依頼】ROE・EPS、直近決算から『企業の稼ぐ力』を深掘りし、今後の展望を述べてください。また『何ドル（何円）までなら上がっても割安で買えるのか』という買い増し推奨価格を根拠とともに提示してください。"
                     )
                 else:
                     prompt = (
-                        f"銘柄:{ticker}のROE({roe_percent:.2f}%)とEPS成長率({eps_percent:.2f}%)から見た企業の評価を、100文字以内で簡潔に教えてください。具体的な推奨価格は伏せてください。"
+                        f"銘柄:{ticker}のROE({roe_percent:.2f}%)とEPS成長率({eps_percent:.2f}%)から見た企業の稼ぐ力を、100文字以内で簡潔に評価してください。目標価格は含めないでください。"
                     )
 
                 # AI実行 (安定版 gemini-1.5-flash)
                 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
                 model = genai.GenerativeModel("gemini-1.5-flash")
-                
-                # 安全に生成を実行
                 response = model.generate_content(prompt)
 
                 st.markdown("---")
                 st.markdown(response.text)
                 
+                # 分析成功時、無料ユーザーのみカウントアップ
                 if not is_premium:
                     st.session_state.usage_count += 1
                     
         except Exception as e:
-            st.error(f"分析中にエラーが発生しました。銘柄コードが正しいか確認してください。\n詳細: {e}")
+            st.error(f"分析エラー：銘柄が見つからないか、API制限です。\n詳細: {e}")
 
 # --- 6. 案内 ---
 st.markdown("---")
 if not is_premium:
-    st.subheader("🚀 さらなる詳細分析が必要ですか？")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.write("**無料版（現在）**")
-        st.write("・1日3回まで / 簡易コメントのみ")
-    with col2:
-        st.write("**プレミアム版（Premium）**")
-        st.write("・✨ **回数無制限 / 目標株価・買い増しライン提示**")
+    st.subheader("🚀 プレミアム版で制限を解除しませんか？")
+    st.write("プレミアム版なら、回数無制限で『買い増し推奨価格』までズバリ表示します。")
     st.link_button("💎 プレミアム会員の詳細・登録はこちら", "https://bodymoneymakers.com/premium")
 
 st.info("※投資の最終決定はご自身の判断で行ってください。")
