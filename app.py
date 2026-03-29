@@ -9,16 +9,17 @@ from datetime import datetime, timedelta
 st.set_page_config(page_title="AI投資アナリスト yuyu Premium", layout="centered")
 
 # --- 1. ユーザーデータベース（Googleスプレッドシート）の読み込み ---
-@st.cache_data(ttl=300) # キャッシュを5分（300秒）に短縮して反映を速くしました
+@st.cache_data(ttl=300)
 def load_user_data():
     try:
+        # SecretsからスプレッドシートのURLを取得
         sheet_url = st.secrets["USER_SHEET_URL"]
         df = pd.read_csv(sheet_url)
         # カラム名の前後の空白を削除して不一致を防止
         df.columns = df.columns.str.strip()
         return df
     except Exception as e:
-        st.error(f"シート読み込みエラー: {e}")
+        # 読み込み失敗時は空のデータフレームを返す
         return pd.DataFrame(columns=["username", "password", "name"])
 
 user_db = load_user_data()
@@ -36,25 +37,20 @@ with st.sidebar:
     
     if not st.session_state.authenticated:
         st.subheader("🔑 会員ログイン")
-        with st.form("login_sidebar"):
-            user_input = st.text_input("ユーザーID（メールアドレス）")
-            pw_input = st.text_input("パスワード", type="password")
-            submit = st.form_submit_button("ログイン")
-
-            if not st.session_state.authenticated:
-        st.subheader("🔑 会員ログイン")
+        # 登録ユーザー数を表示（デバッグ用・ログインできれば消してもOK）
         st.write(f"現在の登録ユーザー数: {len(user_db)}名")
+        
         with st.form("login_sidebar"):
             user_input = st.text_input("ユーザーID（メールアドレス）")
             pw_input = st.text_input("パスワード", type="password")
             submit = st.form_submit_button("ログイン")
-
             
             if submit:
-                # 前後の空白を消して照合（入力ミス防止）
+                # 入力値の前後の空白を消して照合
                 u = user_input.strip()
                 p = pw_input.strip()
                 
+                # IDとパスワードが一致する行を探す
                 match = user_db[(user_db['username'].astype(str).str.strip() == u) & 
                                 (user_db['password'].astype(str).str.strip() == p)]
                 
@@ -84,7 +80,7 @@ with st.sidebar:
 st.title("📈 AI投資診断アプリ by yuyu")
 st.caption("最新のAIモデルによる銘柄分析（ROE・EPS・最新ニュース重視）")
 
-# プレミアム判定
+# プレミアム判定（ログインしていればTrue）
 is_premium = st.session_state.authenticated
 
 if not is_premium:
@@ -94,27 +90,29 @@ else:
     st.success("✨ プレミアム権限により、分析回数は無制限です。")
 
 raw_input = st.text_input("銘柄コードを入力 (例: AAPL, 7203, NVDA)", "NVDA").strip()
+# 日本株（4桁数字）の場合は自動で .T を付与してヤフーファイナンスに対応
 ticker = f"{raw_input}.T" if (raw_input.isdigit() and len(raw_input) == 4) else raw_input.upper()
 
 # --- 5. 分析実行 ---
 if st.button("AIフル分析を実行"):
-    # 無料ユーザーかつ回数切れの場合
+    # 無料ユーザーかつ回数切れの場合のチェック
     if not is_premium and st.session_state.usage_count >= 3:
         st.error("本日の無料枠（3回）を超えました。")
         st.link_button("💎 プレミアム会員登録で制限を解除", "https://bodymoneymakers.com/premium")
     else:
         try:
             with st.spinner(f"最新のAIが {ticker} を分析中..."):
-                # データ取得
+                # データ取得 (yfinance)
                 stock = yf.Ticker(ticker)
                 info = stock.info
                 
+                # 指標の取得
                 roe_raw = info.get('returnOnEquity')
                 roe_percent = (roe_raw * 100) if roe_raw is not None else 0.0
                 eps_raw = info.get('earningsGrowth')
                 eps_percent = (eps_raw * 100) if eps_raw is not None else 0.0
 
-                # ニュース取得
+                # ニュース取得 (Finnhub)
                 news_summary = "直近1週間の重要ニュースなし"
                 try:
                     finnhub_client = finnhub.Client(api_key=st.secrets["FINNHUB_API_KEY"])
@@ -126,7 +124,7 @@ if st.button("AIフル分析を実行"):
                 except:
                     pass
 
-                # プロンプト出し分け
+                # AIへの指示（プロンプト）出し分け
                 if is_premium:
                     prompt = (
                         f"あなたは2000万円を運用する投資家『yuyu』です。プロの証券マンの視点で詳細に回答してください。\n"
@@ -152,9 +150,9 @@ if st.button("AIフル分析を実行"):
                     st.session_state.usage_count += 1
                     
         except Exception as e:
-            st.error(f"分析エラー：銘柄が見つからないか、API制限です。\n詳細: {e}")
+            st.error(f"分析エラー：銘柄が見つからないか、API制限です。時間をおいて再度お試しください。\n詳細: {e}")
 
-# --- 6. 案内 ---
+# --- 6. フッター案内 ---
 st.markdown("---")
 if not is_premium:
     st.subheader("🚀 プレミアム版で制限を解除しませんか？")
