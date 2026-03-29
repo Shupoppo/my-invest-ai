@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 st.set_page_config(page_title="AI投資アナリスト yuyu Premium", layout="centered")
 
 # --- 1. ユーザーデータベースの読み込み ---
-@st.cache_data(ttl=60) # 反映を速めるためTTLを短縮
+@st.cache_data(ttl=300) # 5分ごとに自動更新されるため、手動ボタンは不要
 def load_user_data():
     try:
         sheet_url = st.secrets["USER_SHEET_URL"]
@@ -28,7 +28,7 @@ if "authenticated" not in st.session_state:
 if "usage_count" not in st.session_state:
     st.session_state.usage_count = 0
 
-# --- 3. サイドバー：ログイン管理 & プレミアム導線 ---
+# --- 3. サイドバー：ログイン管理 ---
 with st.sidebar:
     st.title("💎 Premium Plan")
     if not st.session_state.authenticated:
@@ -38,7 +38,6 @@ with st.sidebar:
             pw_input = st.text_input("パスワード", type="password")
             if st.form_submit_button("ログイン"):
                 u, p = user_input.strip(), pw_input.strip()
-                # 名簿と照合
                 match = user_db[(user_db['username'].astype(str).str.strip() == u) & 
                                 (user_db['password'].astype(str).str.strip() == p)]
                 if not match.empty:
@@ -49,15 +48,8 @@ with st.sidebar:
                     st.error("IDまたはパスワードが違います")
         
         st.markdown("---")
-        st.subheader("🌟 プレミアム未加入の方")
-        st.info("有料会員は回数無制限。AIが『買い増し推奨価格』をズバリ提示します。")
+        st.info("💡 有料会員は回数無制限。AIが『買い増し推奨価格』をズバリ提示します。")
         
-        # 確定した詳細ページURLへリダイレクト
-        detail_url = "https://bodymoneymakers.com/ai%e6%8a%95%e8%b3%87%e3%82%a2%e3%83%8a%e3%83%aa%e3%82%b9%e3%83%88-yuyu-premium-%e8%a9%b3%e7%b4%b0/"
-        if st.button("プレミアム詳細・お申し込み"):
-            js = f"window.open('{detail_url}')"
-            st.components.v1.html(f'<script>{js}</script>', height=0)
-            
     else:
         st.write(f"👤 **{st.session_state.user_info['name']} 様**")
         st.success("プレミアム権限：有効")
@@ -65,26 +57,22 @@ with st.sidebar:
             st.session_state.authenticated = False
             st.session_state.user_info = None
             st.rerun()
-    
-    if st.button("🔄 最新の名簿を読み込む"):
-        st.cache_data.clear()
-        st.rerun()
 
 # --- 4. メイン画面 ---
 st.title("📈 AI投資診断アプリ by yuyu")
 is_premium = st.session_state.authenticated
+detail_url = "https://bodymoneymakers.com/ai%e6%8a%95%e8%b3%87%e3%82%a2%e3%83%8a%e3%83%aa%e3%82%b9%e3%83%88-yuyu-premium-%e8%a9%b3%e7%b4%b0/"
 
-# --- 💎 プラン説明（無料ユーザーのみ表示） ---
+# --- 💎 プラン説明（未ログイン時のみ表示） ---
 if not is_premium:
-    with st.expander("🚀 プラン内容の比較（無料 vs 有料）", expanded=True):
+    with st.expander("🚀 プレミアム版で投資戦略を強化", expanded=True):
         plan_data = {
             "機能": ["分析回数", "買い増し推奨価格", "最新ニュース分析", "フル機能アクセス"],
             "無料版": ["1日 3回まで", "❌ 非表示", "❌ 簡易表示", "❌ 制限あり"],
-            "Premium版": ["✨ 無制限", "✅ ズバリ提示", "✅ 詳細解説", "✅ フル解放"]
+            "Premium版": ["✨ 無制限", "✅ ズバリ提示", "✅ 詳細解説", "✅ フル解放熱望"]
         }
         st.table(pd.DataFrame(plan_data))
-        # 詳細ページへのボタン
-        st.link_button("💎 Premium版の詳細・申し込みはこちら", detail_url)
+        st.link_button("💎 詳細・お申し込みはこちら", detail_url)
 
 # --- 5. 入力セクション ---
 raw_input = st.text_input("銘柄コードを入力 (例: AAPL, NVDA, 7203)", "NVDA").strip()
@@ -101,22 +89,19 @@ if st.button("AIフル分析を実行"):
         st.link_button("👉 プレミアム登録で制限を解除する", detail_url)
     else:
         try:
-            with st.spinner("AIが財務データと最新ニュースをスキャン中..."):
-                # データ取得
+            with st.spinner("AIが最新市場データを解析中..."):
                 stock = yf.Ticker(ticker)
                 info = stock.info
                 if not info or 'symbol' not in info:
                     st.error(f"銘柄 '{ticker}' のデータが見つかりません。")
                     st.stop()
 
-                # 財務指標の抽出
                 roe = (info.get('returnOnEquity', 0) * 100)
                 eps_g = (info.get('earningsGrowth', 0) * 100)
                 current_price = info.get('currentPrice', info.get('regularMarketPrice', 0))
                 currency = info.get('currency', 'USD')
-                per = info.get('trailingPE', 0)
 
-                # ニュース取得 (Finnhub)
+                # ニュース取得
                 news_text = "直近の重要ニュースは取得されませんでした。"
                 try:
                     f_client = finnhub.Client(api_key=st.secrets["FINNHUB_API_KEY"])
@@ -127,25 +112,21 @@ if st.button("AIフル分析を実行"):
                         news_text = "\n".join([f"- {n['headline']}" for n in news[:3]])
                 except: pass
 
-                # AI接続設定
+                # AI接続
                 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
                 model = genai.GenerativeModel("gemini-1.5-flash")
                 
-                # 証券マン yuyu プロンプト（プレミアム用）
                 if is_premium:
                     prompt = (
-                        f"あなたは2000万円を運用する投資家yuyuです。証券営業の経験を活かし、プロの視点で回答してください。\n"
-                        f"銘柄:{ticker}、価格:{current_price}{currency}、ROE:{roe:.2f}%、EPS成長:{eps_g:.2f}%、PER:{per:.2f}倍。\n"
-                        f"最新ニュース:{news_text}\n\n"
-                        f"【依頼】\n"
-                        f"1. ROEとEPS成長率に基づき、この企業の『稼ぐ力』を厳しく評価してください。\n"
-                        f"2. 最新ニュースが株価に与える影響を解説してください。\n"
-                        f"3. 『何ドル（何円）までなら上がっても割安で買えるか』、目標買い増し価格を論理的に提示してください。\n"
-                        f"4. 最後に『さらに詳しい銘柄分析や投資戦略については、ブログ「bodymoneymakers.com」で解説しています。ぜひチェックしてください！』と締めてください。"
+                        f"あなたは投資家yuyuです。証券営業の経験を活かし、客観的なデータに基づき回答してください。\n"
+                        f"銘柄:{ticker}、現在価格:{current_price}{currency}、ROE:{roe:.2f}%、EPS成長:{eps_g:.2f}%。\n"
+                        f"ニュース:{news_text}\n\n"
+                        f"【依頼】企業の稼ぐ力と今後の展望、そして『何ドル（何円）までなら上がっても割安と言えるか』を論理的に解説してください。\n"
+                        f"【重要】回答の最後は必ず『さらに詳しい銘柄分析や投資戦略については、ブログ「bodymoneymakers.com」で解説しています。ぜひチェックしてください！』という一文で締めてください。"
                     )
                 else:
                     prompt = (
-                        f"銘柄:{ticker}の稼ぐ力を財務データ(ROE:{roe:.2f}%, EPS成長:{eps_g:.2f}%)から100文字程度で評価してください。"
+                        f"銘柄:{ticker}の稼ぐ力をROE:{roe:.2f}%等の財務データから100文字程度で評価してください。"
                         f"最後に『Premium版なら具体的な買い増し推奨価格も表示します。』と案内を添えてください。"
                     )
 
@@ -155,23 +136,13 @@ if st.button("AIフル分析を実行"):
                 st.subheader(f"📊 {ticker} の分析レポート")
                 st.markdown(response.text)
                 
-                # アクション誘導
-                st.link_button("🚀 yuyuの最新投資ブログを読む", "https://bodymoneymakers.com/")
-                
                 if not is_premium:
                     st.session_state.usage_count += 1
 
         except Exception as e:
-            st.error(f"分析エラー: {e}")
+            st.error(f"エラーが発生しました。時間を置いて再度お試しください。")
 
 # --- 7. 共通フッター ---
 st.markdown("---")
-col1, col2 = st.columns(2)
-with col1:
-    st.write("💡 **最新の投資戦略をチェック**")
-    st.link_button("📝 公式ブログへ", "https://bodymoneymakers.com/")
-with col2:
-    st.write("💎 **会員限定コンテンツ**")
-    st.link_button("👑 プレミアム詳細ページへ", detail_url)
-
+st.link_button("📝 公式ブログ「bodymoneymakers.com」へ", "https://bodymoneymakers.com/")
 st.caption("© 2026 AI投資アナリスト yuyu | 投資は自己責任でお願いいたします。")
